@@ -1,8 +1,10 @@
 {
   "name": "gfsl",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "A generic file system library for nodejs",
   "main": "dist/files.js",
+  "module": "dist/index.js",
+  "types": "./types/index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -10,7 +12,13 @@
     "type": "git",
     "url": "git+https://github.com/Hanro50/gfsl.git"
   },
-  
+  "files": [
+    "dist",
+    "types",
+    "package.json",
+    "LICENSE",
+    "README.md"
+  ],
   "keywords": [
     "file",
     "filesystem",
