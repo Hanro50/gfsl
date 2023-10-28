@@ -1,69 +1,29 @@
-/**Accessed by get.js, imports allowed from other GMLL modules */
+import { get7zip, isWin, mkdir, mklink } from "./internal.js";
+import { createHash } from "crypto";
+import { arch, platform, tmpdir, type } from "os";
 import { join } from "path";
 import fetch from "node-fetch";
 import {
   existsSync,
-  mkdirSync,
-  unlinkSync,
-  symlinkSync,
-  readFileSync,
-  createWriteStream,
+
   statSync,
-  writeFileSync,
+
   rmSync,
   readdirSync,
   copyFileSync,
   lstatSync,
   renameSync,
   access,
+  createWriteStream,
+  readFileSync,
+  writeFileSync,
   constants,
+
 } from "fs";
-import { createHash } from "crypto";
-import { platform, tmpdir, type } from "os";
 import { execSync, spawn } from "child_process";
-import type { DownloadableFile } from "./types";
-export interface WrappedObj {
-  save: () => void;
-  getFile: () => File;
-}
 
-/**
- * @param dest Path to create the link in
- * @param path Path to the file to link to
- */
-function mklink(dest: string, path: string) {
-  try {
-    if (existsSync(path)) unlinkSync(path);
 
-    symlinkSync(dest, path, "junction");
-  } catch (e) {
-    console.error(e, existsSync(path), path);
-    console.error("Could not create syslink between d:" + dest + "=>p:" + path);
-    process.exit();
-  }
-}
 
-function mkdir(path: string) {
-  if (!existsSync(path)) mkdirSync(path, { recursive: true });
-}
-const isWin = platform() == "win32";
-
-export function stringify(json: object) {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  //@ts-ignore
-  return JSON.stringify(json, "\n", "\t");
-}
-export function packAsync(
-  pathToDirOrFile: string,
-  pathToArchive: string,
-  zipDir?: Dir,
-) {
-  const com = ["a", "-r", pathToArchive, pathToDirOrFile];
-  return new Promise<void>((e) => {
-    const s = spawn(get7zip(zipDir).sysPath(), com, { env: process.env });
-    s.on("exit", e);
-  });
-}
 export class Dir {
   path: string[];
   constructor(...path: string[]) {
@@ -106,7 +66,7 @@ export class Dir {
   linkTo(dest: string | string[] | this) {
     if (this instanceof File && platform() == "win32")
       console.warn(
-        "[GMLL]: Symlinks in Windows need administrator privileges!\nThings are about to go wrong!",
+        "[GFSL]: Symlinks in Windows need administrator privileges!\nThings are about to go wrong!",
       );
     if (dest instanceof File) dest = [...dest.path, dest.name];
     if (dest instanceof Dir) dest = dest.path;
@@ -117,7 +77,7 @@ export class Dir {
   linkFrom(path: string | string[] | this) {
     if (this instanceof File && platform() == "win32")
       console.warn(
-        "[GMLL]: Symlinks in Windows need administrator privileges!\nThings are about to go wrong!",
+        "[GFSL]: Symlinks in Windows need administrator privileges!\nThings are about to go wrong!",
       );
     if (path instanceof File) path = [...path.path, path.name];
     if (path instanceof Dir) path = path.path;
@@ -201,11 +161,11 @@ export class Dir {
       if (checksums[chk] == sha1) return true;
     }
     console.log(
-      "got " + sha1 + "\nexpected:" + expected + "\n" + this.sysPath(),
+      "[GFSL]: got " + sha1 + "\nexpected:" + expected + "\n" + this.sysPath(),
     );
     return false;
   }
-  /**Returns false if the file is in missmatch.*/
+  /**Returns true if the file matches what is expected.*/
   chkSelf(chk?: { sha1?: string | string[]; size?: number }) {
     if (!chk || !this.exists()) return false;
     if (chk.sha1 && !this.sha1(chk.sha1)) return false;
@@ -214,6 +174,7 @@ export class Dir {
     return true;
   }
 }
+
 export class File extends Dir {
   name: string;
   constructor(...path: string[]) {
@@ -262,7 +223,6 @@ export class File extends Dir {
   toJSON<T>() {
     if (this.exists())
       return JSON.parse(readFileSync(this.sysPath()).toString()) as T;
-    console.trace();
     throw "No file to read!";
   }
   /**
@@ -270,6 +230,7 @@ export class File extends Dir {
    * @param url The url of the file you want to download
    * @param chk The file check
    * @returns this object to allow for chaining
+   * 
    */
   async download(
     url: string,
@@ -292,11 +253,7 @@ export class File extends Dir {
               } else reject(res.status);
             }
             res.body.pipe(file, { end: true });
-            file.on("close", () => {
-              if (!this.chkSelf(chk)) {
-                reject("mismatch!");
-              } else resolve;
-            });
+            file.on("close", resolve);
           })
           .catch(reject);
       });
@@ -313,7 +270,7 @@ export class File extends Dir {
   }
   /**Writes data to file. Automatically converts JSON objects to parsable strings before saving them*/
   write(data: string | ArrayBuffer | object) {
-    if (typeof data == "object") data = stringify(data);
+    if (typeof data == "object") data = jsonEncode(data);
     writeFileSync(this.sysPath(), data);
   }
   /**Loads a json object from the file system and adds some shortcut functions to make it easier to save. */
@@ -330,135 +287,81 @@ export class File extends Dir {
     result.save = () => this.write(result);
     return result;
   }
-  toDownloadable(
-    url: string,
-    key?: string,
-    chk?: { sha1?: string | string[]; size?: number },
-    opt?: {
-      executable?: boolean | string;
-      unzip?: { file: Dir; exclude?: string[] };
-    },
-  ) {
-    this.mkdir();
-    const d: DownloadableFile = {
-      key: key || [...this.path, this.name].join("/"),
-      name: this.name,
-      path: this.path,
-      url: url,
-      chk: {},
-    };
-    if (chk) {
-      d.chk = chk;
-    }
-    if (opt) {
-      d.executable = opt.executable;
-      if (opt.unzip) {
-        opt.unzip.file.mkdir();
-        d.unzip = { file: opt.unzip.file.path, exclude: opt.unzip.exclude };
-      }
-    }
-    return d;
-  }
-  /**
-   * 0 Full redownload
-   * 1 unzip only
-   * 2 fine
-   */
-  static check(json: Partial<DownloadableFile>) {
-    const f = new this(...json.path, json.name);
-    let i = 2;
-    if (json.dynamic && f.exists()) return 2;
-    if (json.executable || json.unzip) i = 1;
-    if (!json.chk || !json.path || !json.name) return 0;
-    return f.chkSelf(json.chk) ? i : 0;
-  }
-  async expand(json: Partial<DownloadableFile>, zipDir: Dir) {
-    if (json.unzip) {
-      await this.unzip(new Dir(...json.unzip.file), json.unzip.exclude, zipDir);
-    }
-    if (json.executable) {
-      if (typeof json.executable == "boolean") this.chmod();
-      else new File(json.executable).chmod();
-    }
-  }
 
-  static async process(json: DownloadableFile, zipDir: Dir) {
-    const f = new this(...json.path, json.name);
-    if (json.dynamic && f.exists()) {
-      return;
-    }
-    await f.download(json.url, json.chk, { noRetry: json.noRetry });
-    await f.expand(json, zipDir);
-  }
-  /**Similar to {@link extract}, but uses a blacklist approach */
-  unzip(path: Dir, exclude?: string[], zipDir?: Dir) {
+  unzip(path: Dir, opt: { exclude?: string[], include?: string[], zipDir?: Dir } = {}) {
     const com = ["x", this.sysPath(), "-y", "-o" + path.sysPath()];
-    if (exclude) {
-      exclude.forEach((e) => {
+
+    if (opt.include) {
+      opt.include.forEach((e) => {
+        let f = String(e);
+        if (f.endsWith("/")) f += "*";
+        com.push(f);
+      });
+    }
+    if (opt.exclude) {
+      opt.exclude.forEach((e) => {
         let f = String(e);
         if (f.endsWith("/")) f += "*";
         com.push("-xr!" + f);
       });
     }
     return new Promise<void>((e) => {
-      const s = spawn(get7zip(zipDir).sysPath(), com, {
+      const s = spawn(get7zip(opt.zipDir || zipDirectory).sysPath(), com, {
         cwd: join(this.getDir().sysPath()),
         env: process.env,
       });
       s.on("exit", e);
     });
   }
-  /**Similar to {@link unzip}, but uses a whitelist approach */
-  extract(path: Dir, files: string[], zipDir?: Dir) {
-    const com = ["x", this.sysPath(), "-y", "-o" + path.sysPath()];
 
-    files.forEach((e) => {
-      let f = String(e);
-      if (f.endsWith("/")) f += "*";
-      com.push(f);
-    });
-    com.push("-r");
-    return new Promise<void>((e) => {
-      const s = spawn(get7zip(zipDir).sysPath(), com, {
-        cwd: join(this.getDir().sysPath()),
-        env: process.env,
-      });
-      s.on("exit", e);
-    });
-  }
-  //**Checks if a file is executable */
   isExecutable(): Promise<boolean> {
     return new Promise((res) =>
       access(this.sysPath(), constants.F_OK, (err) => res(err ? false : true)),
     );
   }
 }
-let defDir = Dir.tmpdir().getDir("gmll");
 
-function get7zip(dir: Dir = defDir) {
-  const loc = dir.getDir("7z");
-  const d = loc.getFile("index.json");
-  if (!d.exists()) throw "Not initialized";
-  const m = d.toJSON<{ _main: string; [key: string]: string }>();
-  return loc.getFile(m._main);
+export interface WrappedObj {
+  save: () => void;
+  getFile: () => File;
 }
 
-let z7Repo = "https://download.hanro50.net.za/7-zip";
-/**The location serving 7zip binary*/
-export function set7zipRepo(z7: string) {
-  z7Repo = z7;
+let zipDirectory = Dir.tmpdir().getDir("gfsl");
+
+export function getRealCpuArch() {
+  let architecture = arch(); //ProgramFiles(Arm)
+  if (platform() == "win32") {
+    if ("ProgramFiles(Arm)" in process.env) architecture = "arm64"; //For arm64
+    else if ("PROCESSOR_ARCHITEW6432" in process.env)
+      architecture = "x64"; //For AMD64 with 32-bit node
+    else if (architecture != "x64") architecture = "x86"; //To filter out ia32 or x32 and translate that to x86
+  }
+  return architecture;
 }
-
-
-export async function download7zip(
-  dir: Dir,
-  os: "linux" | "windows" | "osx",
-  arch: "arm" | "arm64" | "x32" | "x64",
+const osMap = {
+  "darwin": "osx",
+  "win32": "windows",
+  "linux": "linux"
+}
+export async function download7zip(opt:
+  {
+    dir?: Dir,
+    os?: "linux" | "windows" | "osx",
+    arch?: "arm" | "arm64" | "x32" | "x64",
+    z7Repo?: string
+  }
 ) {
+  const dir = opt.dir || zipDirectory;
+
+
+  const os = opt.os || osMap[platform()] || platform();
+  const architexture = opt.arch || getRealCpuArch();
+  let z7Repo = opt.z7Repo || "https://download.hanro50.net.za/7-zip"
+  if (!z7Repo.endsWith("/")) z7Repo += "/";
   const timeChk = Date.now();
-  defDir = dir;
+  zipDirectory = dir;
   const chkDef = { _ver: "22.01", data: {} };
-  console.log("[GMLL]: Checking 7zip");
+  console.log("[GFSL]: Checking 7zip");
   const loc = dir.getDir("7z");
 
   let chk: {
@@ -499,14 +402,15 @@ export async function download7zip(
     }
   };
   const manifest = loc.getFile("index.json");
-  if (!z7Repo.endsWith("/")) z7Repo += "/";
-  const link = `${z7Repo}${os}/${arch}/`;
+
+  const link = `${z7Repo}${os}/${architexture}/`;
+  console.log(link)
 
   const f = await manifest.download(link + "index.json", chk.data["index"], {
     onReDownload: (f) => onReDownload(f, "index"),
   });
   // chk.data["index"] = { size: f.getSize(), sha1: f.getHash() }
-  const m = f.toJSON<{ _main: string; [key: string]: string }>();
+  const m = f.toJSON<{ _main: string;[key: string]: string }>();
   const _main = m._main;
   for (const key of Object.keys(m)) {
     console.log(key);
@@ -520,4 +424,20 @@ export async function download7zip(
   if (fNew) chkFile.write(chk);
 
   console.log("Zip file check took " + (Date.now() - timeChk) + " ms");
+}
+export function packAsync(
+  pathToDirOrFile: string,
+  pathToArchive: string,
+  zipDir?: Dir,
+) {
+  const com = ["a", "-r", pathToArchive, pathToDirOrFile];
+  return new Promise<void>((e) => {
+    const s = spawn(get7zip(zipDir || zipDirectory).sysPath(), com, { env: process.env });
+    s.on("exit", e);
+  });
+}
+export function jsonEncode(json: object) {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  //@ts-ignore
+  return JSON.stringify(json, "\n", "\t");
 }

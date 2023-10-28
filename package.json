@@ -1,18 +1,29 @@
 {
   "name": "gfsl",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "A generic file system library for nodejs",
-  "main": "dist/files.js",
-  "module": "dist/files.js",
-  "types": "./types/files.d.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "types/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "docs": "typedoc src/index.ts --out ./webpage/docs/",
+    "dev":"tsc -w"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Hanro50/gfsl.git"
   },
+  "funding": [
+    {
+      "type": "paypal",
+      "url": "https://paypal.me/hanro50"
+    }
+  ],
+  "engines": {
+    "node": ">=14"
+  },
   "files": [
+    "src",
     "dist",
     "types",
     "package.json",
@@ -41,6 +52,7 @@
   "devDependencies": {
     "@types/node-fetch": "^2.5.12",
     "@types/node": "^20.8.9",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "typedoc": "^0.25.2"
   }
 }

@@ -1,11 +1,4 @@
 /// <reference types="node" />
-import type { DownloadableFile } from "./types";
-export interface WrappedObj {
-    save: () => void;
-    getFile: () => File;
-}
-export declare function stringify(json: object): string;
-export declare function packAsync(pathToDirOrFile: string, pathToArchive: string, zipDir?: Dir): Promise<void>;
 export declare class Dir {
     path: string[];
     constructor(...path: string[]);
@@ -46,12 +39,12 @@ export declare class Dir {
     /**Gets the name of this directory*/
     getName(): string;
     /**Lists a set directory's contents*/
-    ls(): (File | Dir)[];
+    ls(): (Dir | File)[];
     /**Checks if the size value given matches with this object. (@see {@link getSize})*/
     size(expected: number): boolean;
     /**Checks if an expected hash matches with this object. (@see {@link getHash})*/
     sha1(expected: string | string[]): boolean;
-    /**Returns false if the file is in missmatch.*/
+    /**Returns true if the file matches what is expected.*/
     chkSelf(chk?: {
         sha1?: string | string[];
         size?: number;
@@ -85,6 +78,7 @@ export declare class File extends Dir {
      * @param url The url of the file you want to download
      * @param chk The file check
      * @returns this object to allow for chaining
+     *
      */
     download(url: string, chk?: {
         sha1?: string | string[];
@@ -102,30 +96,23 @@ export declare class File extends Dir {
     load<T>(def: T, serializer?: (raw: T) => T): T & WrappedObj;
     /**Turns an object into a wrappedObj. Essentially this just adds functions to make it easier to save. */
     wrap<T>(obj: T): T & WrappedObj;
-    toDownloadable(url: string, key?: string, chk?: {
-        sha1?: string | string[];
-        size?: number;
-    }, opt?: {
-        executable?: boolean | string;
-        unzip?: {
-            file: Dir;
-            exclude?: string[];
-        };
-    }): DownloadableFile;
-    /**
-     * 0 Full redownload
-     * 1 unzip only
-     * 2 fine
-     */
-    static check(json: Partial<DownloadableFile>): number;
-    expand(json: Partial<DownloadableFile>, zipDir: Dir): Promise<void>;
-    static process(json: DownloadableFile, zipDir: Dir): Promise<void>;
-    /**Similar to {@link extract}, but uses a blacklist approach */
-    unzip(path: Dir, exclude?: string[], zipDir?: Dir): Promise<void>;
-    /**Similar to {@link unzip}, but uses a whitelist approach */
-    extract(path: Dir, files: string[], zipDir?: Dir): Promise<void>;
+    unzip(path: Dir, opt?: {
+        exclude?: string[];
+        include?: string[];
+        zipDir?: Dir;
+    }): Promise<void>;
     isExecutable(): Promise<boolean>;
 }
-/**The location serving 7zip binary*/
-export declare function set7zipRepo(z7: string): void;
-export declare function download7zip(dir: Dir, os: "linux" | "windows" | "osx", arch: "arm" | "arm64" | "x32" | "x64"): Promise<void>;
+export interface WrappedObj {
+    save: () => void;
+    getFile: () => File;
+}
+export declare function getRealCpuArch(): string;
+export declare function download7zip(opt: {
+    dir?: Dir;
+    os?: "linux" | "windows" | "osx";
+    arch?: "arm" | "arm64" | "x32" | "x64";
+    z7Repo?: string;
+}): Promise<void>;
+export declare function packAsync(pathToDirOrFile: string, pathToArchive: string, zipDir?: Dir): Promise<void>;
+export declare function jsonEncode(json: object): string;
