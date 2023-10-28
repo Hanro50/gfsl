@@ -1,0 +1,38 @@
+{
+  "name": "gfsl",
+  "version": "1.0.0",
+  "description": "A generic file system library for nodejs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hanro50/gfsl.git"
+  },
+  
+  "keywords": [
+    "file",
+    "filesystem",
+    "zip",
+    "unzip",
+    "rar",
+    "7zip",
+    "wrapper"
+  ],
+  "author": "Hanro50",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Hanro50/gfsl/issues"
+  },
+  "homepage": "https://github.com/Hanro50/gfsl#readme",
+  "dependencies": {
+    "node-fetch": "2.x",
+    "tslib": "^2.3.1"
+  },
+  "devDependencies": {
+    "@types/node-fetch": "^2.5.12",
+    "@types/node": "^20.8.9",
+    "typescript": "^5.2.2"
+  }
+}
