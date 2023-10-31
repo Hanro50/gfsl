@@ -2,7 +2,9 @@ import { get7zip, isWin, mkdir, mklink } from "./internal.js";
 import { createHash } from "crypto";
 import { arch, platform, tmpdir, type } from "os";
 import { join } from "path";
-
+import { execSync, spawn } from "child_process";
+import fetch from "node-fetch";
+import type { AxiosInstance } from "axios";
 import {
   existsSync,
   statSync,
@@ -17,33 +19,15 @@ import {
   writeFileSync,
   constants,
 } from "fs";
-import { execSync, spawn } from "child_process";
-import fetch from "node-fetch";
 
-let fileDownloader = (
+let fileDownloader:(
   self: File,
   url: string,
   opt?: {
     noRetry?: true;
     signal?: AbortSignal;
   }
-) => {
-  return new Promise((resolve, reject) => {
-    const file = createWriteStream(self.sysPath());
-    fetch(url, { signal: opt?.signal })
-      .then((res) => {
-        if (!res.ok) {
-          if (opt?.noRetry) {
-            file.close();
-            self.rm();
-          } else reject(res.status);
-        }
-        res.body.pipe(file, { end: true });
-        file.on("close", resolve);
-      })
-      .catch(reject);
-  });
-};
+) => Promise<void>
 /**Sets the downloader function. Handy if it needs to be something custom. Uses a node fetch implementation by default */
 export function setFileDownloader(
   fs: (
@@ -57,6 +41,55 @@ export function setFileDownloader(
 ) {
   fileDownloader = fs;
 }
+/**Uses node fetch as a downloader */
+export function setNodeFetchDownloader(fetchInstance: typeof fetch) {
+  setFileDownloader((self, url, settings) => {
+    const file = createWriteStream(self.sysPath());
+    return new Promise((resolve, reject) => {
+      fetchInstance(url, { signal: settings?.signal })
+        .then((res) => {
+          if (!res.ok) {
+            if (settings?.noRetry) {
+              file.close();
+              self.rm();
+            } else reject(res.status);
+          }
+          res.body.pipe(file, { end: true });
+          file.on("close", resolve);
+        })
+        .catch(reject);
+    });
+  });
+}
+/**Uses a dynamic axios instance as a downloader */
+export function setDynamicAxiosDownloader(axiosInstance:()=> AxiosInstance) {
+  setFileDownloader((self, url, settings) => {
+    const file = createWriteStream(self.sysPath());
+    return new Promise((resolve, reject) => {
+      axiosInstance()
+        .get(url, { responseType: "stream", signal: settings?.signal })
+        .then((res) => {
+          if (res.status >299) {
+            if (settings?.noRetry) {
+              file.close();
+              self.rm();
+            } else reject(res.status);
+          }
+          res.data.pipe(file, { end: true });
+          file.on("close", resolve);
+        })
+        .catch(reject);
+    });
+  });
+}
+/**Uses a static axios as a downloader */
+export function setAxiosDownloader(axiosInstance: AxiosInstance) {
+ setDynamicAxiosDownloader(()=>axiosInstance);
+}
+/**This will removed in version 2.0.0 */
+setNodeFetchDownloader(fetch);
+
+
 
 export class Dir {
   path: string[];
