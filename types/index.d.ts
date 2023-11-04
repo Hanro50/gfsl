@@ -1,4 +1,17 @@
 /// <reference types="node" />
+import fetch from "node-fetch";
+import type { AxiosInstance } from "axios";
+/**Sets the downloader function. Handy if it needs to be something custom. Uses a node fetch implementation by default */
+export declare function setFileDownloader(fs: (self: File, url: string, opt?: {
+    noRetry?: true;
+    signal?: AbortSignal;
+}) => Promise<void>): void;
+/**Uses node fetch as a downloader */
+export declare function setNodeFetchDownloader(fetchInstance: typeof fetch): void;
+/**Uses a dynamic axios instance as a downloader */
+export declare function setDynamicAxiosDownloader(axiosInstance: () => AxiosInstance): void;
+/**Uses a static axios as a downloader */
+export declare function setAxiosDownloader(axiosInstance: AxiosInstance): void;
 export declare class Dir {
     path: string[];
     constructor(...path: string[]);
